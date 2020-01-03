@@ -24,9 +24,21 @@ func (r Ray) pointAtParameter(t float64) r3.Vector {
 }
 
 func color(r Ray) r3.Vector {
-	unit := r.Dir.Normalize()
-	t := 0.5 * (unit.Y + 1.0)
+	if (hitSphere(r3.Vector{X: 0, Y: 0, Z: -1}, 0.5, r)) {
+		return r3.Vector{X: 1, Y: 0, Z: 0}
+	}
+	unitDir := r.Dir.Normalize()
+	t := 0.5 * (unitDir.Y + 1.0)
 	return r3.Vector{X: 1.0, Y: 1.0, Z: 1.0}.Mul(1.0 - t).Add(r3.Vector{X: 0.5, Y: 0.7, Z: 1.0}.Mul(t))
+}
+
+func hitSphere(center r3.Vector, radius float64, r Ray) bool {
+	oc := r.Org.Sub(center)
+	a := r.Dir.Dot(r.Dir)
+	b := 2.0 * oc.Dot(r.Dir)
+	c := oc.Dot(oc) - radius*radius
+	discriminant := b*b - 4*a*c
+	return (discriminant >= 0)
 }
 
 func main() {
