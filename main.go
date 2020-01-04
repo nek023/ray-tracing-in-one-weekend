@@ -23,11 +23,11 @@ func NewRay(org, dir r3.Vector) Ray {
 }
 
 func (r Ray) pointAtParameter(t float64) r3.Vector {
-	return r3.Vector{
-		r.Org.X + t*r.Dir.X,
-		r.Org.Y + t*r.Dir.Y,
-		r.Org.Z + t*r.Dir.Z,
-	}
+	return NewVector(
+		r.Org.X+t*r.Dir.X,
+		r.Org.Y+t*r.Dir.Y,
+		r.Org.Z+t*r.Dir.Z,
+	)
 }
 
 type HitRecord struct {
@@ -116,11 +116,11 @@ func NewCamera(origin, lowerLeftCorner, horizontal, vertical r3.Vector) Camera {
 func color(r Ray, world Hitable) r3.Vector {
 	var rec HitRecord
 	if world.hit(r, 0, math.MaxFloat64, &rec) {
-		return r3.Vector{X: rec.Normal.X + 1, Y: rec.Normal.Y + 1, Z: rec.Normal.Z + 1}.Mul(0.5)
+		return NewVector(rec.Normal.X+1, rec.Normal.Y+1, rec.Normal.Z+1).Mul(0.5)
 	}
 	unitDir := r.Dir.Normalize()
 	t := 0.5 * (unitDir.Y + 1.0)
-	return r3.Vector{X: 1.0, Y: 1.0, Z: 1.0}.Mul(1.0 - t).Add(r3.Vector{X: 0.5, Y: 0.7, Z: 1.0}.Mul(t))
+	return NewVector(1.0, 1.0, 1.0).Mul(1.0 - t).Add(NewVector(0.5, 0.7, 1.0).Mul(t))
 }
 
 func (c Camera) GetRay(u, v float64) Ray {
@@ -134,8 +134,8 @@ func main() {
 	ns := 100
 	fmt.Printf("P3\n%d %d\n255\n", nx, ny)
 	var list []Hitable
-	list = append(list, NewSphere(r3.Vector{X: 0, Y: 0, Z: -1}, 0.5))
-	list = append(list, NewSphere(r3.Vector{X: 0, Y: -100.5, Z: -1}, 100))
+	list = append(list, NewSphere(NewVector(0, 0, -1), 0.5))
+	list = append(list, NewSphere(NewVector(0, -100.5, -1), 100))
 	world := NewHitableList(list, len(list))
 	cam := NewCamera(
 		NewVector(0.0, 0.0, 0.0),
