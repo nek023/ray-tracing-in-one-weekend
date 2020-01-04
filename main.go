@@ -3,9 +3,15 @@ package main
 import (
 	"fmt"
 	"math"
+	"math/rand"
+	"time"
 
 	"github.com/golang/geo/r3"
 )
+
+func NewVector(x, y, z float64) r3.Vector {
+	return r3.Vector{X: x, Y: y, Z: z}
+}
 
 type Ray struct {
 	Org r3.Vector
@@ -91,6 +97,22 @@ func (hl HitableList) hit(r Ray, tMin float64, tMax float64, rec *HitRecord) boo
 	return hitAnything
 }
 
+type Camera struct {
+	Origin          r3.Vector
+	LowerLeftCorner r3.Vector
+	Horizontal      r3.Vector
+	Vertical        r3.Vector
+}
+
+func NewCamera(origin, lowerLeftCorner, horizontal, vertical r3.Vector) Camera {
+	return Camera{
+		Origin:          origin,
+		LowerLeftCorner: lowerLeftCorner,
+		Horizontal:      horizontal,
+		Vertical:        vertical,
+	}
+}
+
 func color(r Ray, world Hitable) r3.Vector {
 	var rec HitRecord
 	if world.hit(r, 0, math.MaxFloat64, &rec) {
@@ -101,24 +123,36 @@ func color(r Ray, world Hitable) r3.Vector {
 	return r3.Vector{X: 1.0, Y: 1.0, Z: 1.0}.Mul(1.0 - t).Add(r3.Vector{X: 0.5, Y: 0.7, Z: 1.0}.Mul(t))
 }
 
+func (c Camera) GetRay(u, v float64) Ray {
+	return NewRay(c.Origin, c.LowerLeftCorner.Add(c.Horizontal.Mul(u)).Add(c.Vertical.Mul(v)).Sub(c.Origin))
+}
+
 func main() {
+	rand.Seed(time.Now().UnixNano())
 	nx := 200
 	ny := 100
+	ns := 100
 	fmt.Printf("P3\n%d %d\n255\n", nx, ny)
-	lowerLeftCorner := r3.Vector{X: -2.0, Y: -1.0, Z: -1.0}
-	horizontal := r3.Vector{X: 4.0, Y: 0.0, Z: 0.0}
-	vertical := r3.Vector{X: 0.0, Y: 2.0, Z: 0.0}
-	origin := r3.Vector{X: 0.0, Y: 0.0, Z: 0.0}
 	var list []Hitable
 	list = append(list, NewSphere(r3.Vector{X: 0, Y: 0, Z: -1}, 0.5))
 	list = append(list, NewSphere(r3.Vector{X: 0, Y: -100.5, Z: -1}, 100))
 	world := NewHitableList(list, len(list))
+	cam := NewCamera(
+		NewVector(0.0, 0.0, 0.0),
+		NewVector(-2.0, -1.0, -1.0),
+		NewVector(4.0, 0.0, 0.0),
+		NewVector(0.0, 2.0, 0.0),
+	)
 	for j := ny - 1; j >= 0; j-- {
 		for i := 0; i < nx; i++ {
-			u := float64(i) / float64(nx)
-			v := float64(j) / float64(ny)
-			r := NewRay(origin, lowerLeftCorner.Add(horizontal.Mul(u)).Add(vertical.Mul(v)))
-			col := color(r, world)
+			col := NewVector(0, 0, 0)
+			for s := 0; s < ns; s++ {
+				u := (float64(i) + rand.Float64()) / float64(nx)
+				v := (float64(j) + rand.Float64()) / float64(ny)
+				r := cam.GetRay(u, v)
+				col = col.Add(color(r, world))
+			}
+			col = col.Mul(1.0 / float64(ns))
 			ir := int(255.990 * col.X)
 			ig := int(255.990 * col.Y)
 			ib := int(255.990 * col.Z)
