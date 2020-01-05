@@ -106,9 +106,13 @@ type Camera struct {
 	LowerLeftCorner r3.Vector
 	Horizontal      r3.Vector
 	Vertical        r3.Vector
+	U               r3.Vector
+	V               r3.Vector
+	W               r3.Vector
+	LensRadius      float64
 }
 
-func NewCamera(lookFrom r3.Vector, lookAt r3.Vector, vUp r3.Vector, vFov float64, aspect float64) Camera {
+func NewCamera(lookFrom r3.Vector, lookAt r3.Vector, vUp r3.Vector, vFov float64, aspect float64, aperture float64, focusDist float64) Camera {
 	theta := vFov * math.Pi / 180
 	halfHeight := math.Tan(theta / 2)
 	halfWidth := aspect * halfHeight
@@ -117,14 +121,20 @@ func NewCamera(lookFrom r3.Vector, lookAt r3.Vector, vUp r3.Vector, vFov float64
 	v := w.Cross(u)
 	return Camera{
 		Origin:          lookFrom,
-		LowerLeftCorner: lookFrom.Sub(u.Mul(halfWidth)).Sub(v.Mul(halfHeight)).Sub(w),
-		Horizontal:      u.Mul(2 * halfWidth),
-		Vertical:        v.Mul(2 * halfHeight),
+		LowerLeftCorner: lookFrom.Sub(u.Mul(halfWidth * focusDist)).Sub(v.Mul(halfHeight * focusDist)).Sub(w.Mul(focusDist)),
+		Horizontal:      u.Mul(2 * halfWidth * focusDist),
+		Vertical:        v.Mul(2 * halfHeight * focusDist),
+		U:               u,
+		V:               v,
+		W:               w,
+		LensRadius:      aperture / 2,
 	}
 }
 
-func (c Camera) GetRay(u, v float64) Ray {
-	return NewRay(c.Origin, c.LowerLeftCorner.Add(c.Horizontal.Mul(u)).Add(c.Vertical.Mul(v)).Sub(c.Origin))
+func (c Camera) GetRay(s, t float64) Ray {
+	rd := randomInUnitDisk().Mul(c.LensRadius)
+	offset := c.U.Mul(rd.X).Add(c.V.Mul(rd.Y))
+	return NewRay(c.Origin.Add(offset), c.LowerLeftCorner.Add(c.Horizontal.Mul(s)).Add(c.Vertical.Mul(t)).Sub(c.Origin).Sub(offset))
 }
 
 type Material interface {
@@ -238,6 +248,17 @@ func randomInUnitSphere() r3.Vector {
 	return p
 }
 
+func randomInUnitDisk() r3.Vector {
+	var p r3.Vector
+	for {
+		p = NewVector(rand.Float64(), rand.Float64(), 0).Mul(2).Sub(NewVector(1, 1, 0))
+		if p.Norm2() < 1.0 {
+			break
+		}
+	}
+	return p
+}
+
 func VectorMul(a, b r3.Vector) r3.Vector {
 	return NewVector(a.X*b.X, a.Y*b.Y, a.Z*b.Z)
 }
@@ -270,7 +291,11 @@ func main() {
 	list = append(list, NewSphere(NewVector(-1, 0, -1), 0.5, NewDielectric(1.5)))
 	list = append(list, NewSphere(NewVector(-1, 0, -1), -0.45, NewDielectric(1.5)))
 	world := NewHitableList(list, len(list))
-	cam := NewCamera(NewVector(-2, 2, 1), NewVector(0, 0, -1), NewVector(0, 1, 0), 90, float64(nx)/float64(ny))
+	lookFrom := NewVector(3, 3, 2)
+	lookAt := NewVector(0, 0, -1)
+	distToFocus := lookFrom.Sub(lookAt).Norm()
+	aperture := 2.0
+	cam := NewCamera(lookFrom, lookAt, NewVector(0, 1, 0), 20, float64(nx)/float64(ny), aperture, distToFocus)
 	for j := ny - 1; j >= 0; j-- {
 		for i := 0; i < nx; i++ {
 			col := NewVector(0, 0, 0)
