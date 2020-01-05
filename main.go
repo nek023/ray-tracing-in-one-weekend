@@ -108,13 +108,20 @@ type Camera struct {
 	Vertical        r3.Vector
 }
 
-func NewCamera(origin, lowerLeftCorner, horizontal, vertical r3.Vector) Camera {
+func NewCamera(vFov, aspect float64) Camera {
+	theta := vFov * math.Pi / 180
+	halfHeight := math.Tan(theta / 2)
+	halfWidth := aspect * halfHeight
 	return Camera{
-		Origin:          origin,
-		LowerLeftCorner: lowerLeftCorner,
-		Horizontal:      horizontal,
-		Vertical:        vertical,
+		Origin:          NewVector(0, 0, 0),
+		LowerLeftCorner: NewVector(-halfWidth, -halfHeight, -1),
+		Horizontal:      NewVector(2*halfWidth, 0, 0),
+		Vertical:        NewVector(0, 2*halfHeight, 0),
 	}
+}
+
+func (c Camera) GetRay(u, v float64) Ray {
+	return NewRay(c.Origin, c.LowerLeftCorner.Add(c.Horizontal.Mul(u)).Add(c.Vertical.Mul(v)).Sub(c.Origin))
 }
 
 type Material interface {
@@ -247,10 +254,6 @@ func color(r Ray, world Hitable, depth int) r3.Vector {
 	return NewVector(1.0, 1.0, 1.0).Mul(1.0 - t).Add(NewVector(0.5, 0.7, 1.0).Mul(t))
 }
 
-func (c Camera) GetRay(u, v float64) Ray {
-	return NewRay(c.Origin, c.LowerLeftCorner.Add(c.Horizontal.Mul(u)).Add(c.Vertical.Mul(v)).Sub(c.Origin))
-}
-
 func main() {
 	rand.Seed(time.Now().UnixNano())
 	nx := 200
@@ -258,18 +261,11 @@ func main() {
 	ns := 100
 	fmt.Printf("P3\n%d %d\n255\n", nx, ny)
 	var list []Hitable
-	list = append(list, NewSphere(NewVector(0, 0, -1), 0.5, NewLambertian(NewVector(0.1, 0.2, 0.5))))
-	list = append(list, NewSphere(NewVector(0, -100.5, -1), 100, NewLambertian(NewVector(0.8, 0.8, 0))))
-	list = append(list, NewSphere(NewVector(1, 0, -1), 0.5, NewMetal(NewVector(0.8, 0.6, 0.2), 0)))
-	list = append(list, NewSphere(NewVector(-1, 0, -1), 0.5, NewDielectric(1.5)))
-	list = append(list, NewSphere(NewVector(-1, 0, -1), -0.45, NewDielectric(1.5)))
+	r := math.Cos(math.Pi / 4)
+	list = append(list, NewSphere(NewVector(-r, 0, -1), r, NewLambertian(NewVector(0, 0, 1))))
+	list = append(list, NewSphere(NewVector(r, 0, -1), r, NewLambertian(NewVector(1, 0, 0))))
 	world := NewHitableList(list, len(list))
-	cam := NewCamera(
-		NewVector(0.0, 0.0, 0.0),
-		NewVector(-2.0, -1.0, -1.0),
-		NewVector(4.0, 0.0, 0.0),
-		NewVector(0.0, 2.0, 0.0),
-	)
+	cam := NewCamera(90, float64(nx)/float64(ny))
 	for j := ny - 1; j >= 0; j-- {
 		for i := 0; i < nx; i++ {
 			col := NewVector(0, 0, 0)
