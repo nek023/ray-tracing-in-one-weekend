@@ -113,10 +113,22 @@ func NewCamera(origin, lowerLeftCorner, horizontal, vertical r3.Vector) Camera {
 	}
 }
 
+func randomInUnitSphere() r3.Vector {
+	var p r3.Vector
+	for {
+		p = NewVector(rand.Float64(), rand.Float64(), rand.Float64()).Mul(2).Sub(NewVector(1, 1, 1))
+		if p.Norm2() < 1.0 {
+			break
+		}
+	}
+	return p
+}
+
 func color(r Ray, world Hitable) r3.Vector {
 	var rec HitRecord
-	if world.hit(r, 0, math.MaxFloat64, &rec) {
-		return NewVector(rec.Normal.X+1, rec.Normal.Y+1, rec.Normal.Z+1).Mul(0.5)
+	if world.hit(r, 0.001, math.MaxFloat64, &rec) {
+		target := rec.P.Add(rec.Normal).Add(randomInUnitSphere())
+		return color(NewRay(rec.P, target.Sub(rec.P)), world).Mul(0.5)
 	}
 	unitDir := r.Dir.Normalize()
 	t := 0.5 * (unitDir.Y + 1.0)
@@ -153,6 +165,7 @@ func main() {
 				col = col.Add(color(r, world))
 			}
 			col = col.Mul(1.0 / float64(ns))
+			col = NewVector(math.Sqrt(col.X), math.Sqrt(col.Y), math.Sqrt(col.Z))
 			ir := int(255.990 * col.X)
 			ig := int(255.990 * col.Y)
 			ib := int(255.990 * col.Z)
