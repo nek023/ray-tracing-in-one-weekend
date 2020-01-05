@@ -34,22 +34,24 @@ type HitRecord struct {
 	T      float64
 	P      r3.Vector
 	Normal r3.Vector
+	Mat    *Material
 }
 
 type Hitable interface {
-	hit(r Ray, tMin float64, tMax float64, rec *HitRecord) bool
+	Hit(r Ray, tMin float64, tMax float64, rec *HitRecord) bool
 }
 
 type Sphere struct {
 	Center r3.Vector
 	Radius float64
+	Mat    Material
 }
 
-func NewSphere(center r3.Vector, radius float64) Sphere {
-	return Sphere{Center: center, Radius: radius}
+func NewSphere(center r3.Vector, radius float64, mat Material) Sphere {
+	return Sphere{Center: center, Radius: radius, Mat: mat}
 }
 
-func (s Sphere) hit(r Ray, tMin float64, tMax float64, rec *HitRecord) bool {
+func (s Sphere) Hit(r Ray, tMin float64, tMax float64, rec *HitRecord) bool {
 	oc := r.Org.Sub(s.Center)
 	a := r.Dir.Dot(r.Dir)
 	b := oc.Dot(r.Dir)
@@ -61,6 +63,7 @@ func (s Sphere) hit(r Ray, tMin float64, tMax float64, rec *HitRecord) bool {
 			rec.T = temp
 			rec.P = r.pointAtParameter(rec.T)
 			rec.Normal = rec.P.Sub(s.Center).Mul(1.0 / s.Radius)
+			rec.Mat = &s.Mat
 			return true
 		}
 		temp = (-b + math.Sqrt(discriminant)) / a
@@ -68,6 +71,7 @@ func (s Sphere) hit(r Ray, tMin float64, tMax float64, rec *HitRecord) bool {
 			rec.T = temp
 			rec.P = r.pointAtParameter(rec.T)
 			rec.Normal = rec.P.Sub(s.Center).Mul(1.0 / s.Radius)
+			rec.Mat = &s.Mat
 			return true
 		}
 	}
@@ -83,12 +87,12 @@ func NewHitableList(list []Hitable, listSize int) HitableList {
 	return HitableList{List: list, ListSize: listSize}
 }
 
-func (hl HitableList) hit(r Ray, tMin float64, tMax float64, rec *HitRecord) bool {
+func (hl HitableList) Hit(r Ray, tMin float64, tMax float64, rec *HitRecord) bool {
 	var tempRec HitRecord
 	hitAnything := false
 	closestSoFar := tMax
 	for i := 0; i < hl.ListSize; i++ {
-		if hl.List[i].hit(r, tMin, closestSoFar, &tempRec) {
+		if hl.List[i].Hit(r, tMin, closestSoFar, &tempRec) {
 			hitAnything = true
 			closestSoFar = tempRec.T
 			*rec = tempRec
@@ -113,6 +117,44 @@ func NewCamera(origin, lowerLeftCorner, horizontal, vertical r3.Vector) Camera {
 	}
 }
 
+type Material interface {
+	Scatter(rIn Ray, rec *HitRecord, attenuation *r3.Vector, scattered *Ray) bool
+}
+
+type Lambertian struct {
+	Albedo r3.Vector
+}
+
+func NewLambertian(albedo r3.Vector) Lambertian {
+	return Lambertian{Albedo: albedo}
+}
+
+func (l Lambertian) Scatter(rIn Ray, rec *HitRecord, attenuation *r3.Vector, scattered *Ray) bool {
+	target := rec.P.Add(rec.Normal).Add(randomInUnitSphere())
+	*scattered = NewRay(rec.P, target.Sub(rec.P))
+	*attenuation = l.Albedo
+	return true
+}
+
+type Metal struct {
+	Albedo r3.Vector
+}
+
+func NewMetal(albedo r3.Vector) Metal {
+	return Metal{Albedo: albedo}
+}
+
+func (m Metal) Scatter(rIn Ray, rec *HitRecord, attenuation *r3.Vector, scattered *Ray) bool {
+	reflected := reflect(rIn.Dir.Normalize(), rec.Normal)
+	*scattered = NewRay(rec.P, reflected)
+	*attenuation = m.Albedo
+	return scattered.Dir.Dot(rec.Normal) > 0
+}
+
+func reflect(v, n r3.Vector) r3.Vector {
+	return v.Sub(n.Mul(2 * v.Dot(n)))
+}
+
 func randomInUnitSphere() r3.Vector {
 	var p r3.Vector
 	for {
@@ -124,11 +166,19 @@ func randomInUnitSphere() r3.Vector {
 	return p
 }
 
-func color(r Ray, world Hitable) r3.Vector {
+func VectorMul(a, b r3.Vector) r3.Vector {
+	return NewVector(a.X*b.X, a.Y*b.Y, a.Z*b.Z)
+}
+
+func color(r Ray, world Hitable, depth int) r3.Vector {
 	var rec HitRecord
-	if world.hit(r, 0.001, math.MaxFloat64, &rec) {
-		target := rec.P.Add(rec.Normal).Add(randomInUnitSphere())
-		return color(NewRay(rec.P, target.Sub(rec.P)), world).Mul(0.5)
+	if world.Hit(r, 0.001, math.MaxFloat64, &rec) {
+		var attenuation r3.Vector
+		var scattered Ray
+		if depth < 50 && (*rec.Mat).Scatter(r, &rec, &attenuation, &scattered) {
+			return VectorMul(attenuation, color(scattered, world, depth+1))
+		}
+		return NewVector(0, 0, 0)
 	}
 	unitDir := r.Dir.Normalize()
 	t := 0.5 * (unitDir.Y + 1.0)
@@ -146,8 +196,10 @@ func main() {
 	ns := 100
 	fmt.Printf("P3\n%d %d\n255\n", nx, ny)
 	var list []Hitable
-	list = append(list, NewSphere(NewVector(0, 0, -1), 0.5))
-	list = append(list, NewSphere(NewVector(0, -100.5, -1), 100))
+	list = append(list, NewSphere(NewVector(0, 0, -1), 0.5, NewLambertian(NewVector(0.8, 0.3, 0.3))))
+	list = append(list, NewSphere(NewVector(0, -100.5, -1), 100, NewLambertian(NewVector(0.8, 0.8, 0))))
+	list = append(list, NewSphere(NewVector(1, 0, -1), 0.5, NewMetal(NewVector(0.8, 0.6, 0.2))))
+	list = append(list, NewSphere(NewVector(-1, 0, -1), 0.5, NewMetal(NewVector(0.8, 0.8, 0.8))))
 	world := NewHitableList(list, len(list))
 	cam := NewCamera(
 		NewVector(0.0, 0.0, 0.0),
@@ -162,7 +214,7 @@ func main() {
 				u := (float64(i) + rand.Float64()) / float64(nx)
 				v := (float64(j) + rand.Float64()) / float64(ny)
 				r := cam.GetRay(u, v)
-				col = col.Add(color(r, world))
+				col = col.Add(color(r, world, 0))
 			}
 			col = col.Mul(1.0 / float64(ns))
 			col = NewVector(math.Sqrt(col.X), math.Sqrt(col.Y), math.Sqrt(col.Z))
