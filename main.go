@@ -278,23 +278,41 @@ func color(r Ray, world Hitable, depth int) r3.Vector {
 	return NewVector(1.0, 1.0, 1.0).Mul(1.0 - t).Add(NewVector(0.5, 0.7, 1.0).Mul(t))
 }
 
+func randomScene() Hitable {
+	var list []Hitable
+	list = append(list, NewSphere(NewVector(0, -1000, 0), 1000, NewLambertian(NewVector(0.5, 0.5, 0.5))))
+	for a := -11; a < 11; a++ {
+		for b := -11; b < 11; b++ {
+			chooseMat := rand.Float64()
+			center := NewVector(float64(a)+0.9*rand.Float64(), 0.2, float64(b)+0.9*rand.Float64())
+			if center.Sub(NewVector(4, 0.2, 0)).Norm() > 0.9 {
+				if chooseMat < 0.8 { // diffuse
+					list = append(list, NewSphere(center, 0.2, NewLambertian(NewVector(rand.Float64()*rand.Float64(), rand.Float64()*rand.Float64(), rand.Float64()*rand.Float64()))))
+				} else if chooseMat < 0.95 { // metal
+					list = append(list, NewSphere(center, 0.2, NewMetal(NewVector(0.5*(1+rand.Float64()), 0.5*(1+rand.Float64()), 0.5*(1+rand.Float64())), 0.5*rand.Float64())))
+				} else { // glass
+					list = append(list, NewSphere(center, 0.2, NewDielectric(1.5)))
+				}
+			}
+		}
+	}
+	list = append(list, NewSphere(NewVector(0, 1, 0), 1.0, NewDielectric(1.5)))
+	list = append(list, NewSphere(NewVector(-4, 1, 0), 1.0, NewLambertian(NewVector(0.4, 0.2, 0.1))))
+	list = append(list, NewSphere(NewVector(4, 1, 0), 1.0, NewMetal(NewVector(0.7, 0.6, 0.5), 0.0)))
+	return NewHitableList(list, len(list))
+}
+
 func main() {
 	rand.Seed(time.Now().UnixNano())
-	nx := 200
-	ny := 100
+	nx := 1200
+	ny := 800
 	ns := 100
 	fmt.Printf("P3\n%d %d\n255\n", nx, ny)
-	var list []Hitable
-	list = append(list, NewSphere(NewVector(0, 0, -1), 0.5, NewLambertian(NewVector(0.1, 0.2, 0.5))))
-	list = append(list, NewSphere(NewVector(0, -100.5, -1), 100, NewLambertian(NewVector(0.8, 0.8, 0))))
-	list = append(list, NewSphere(NewVector(1, 0, -1), 0.5, NewMetal(NewVector(0.8, 0.6, 0.2), 0)))
-	list = append(list, NewSphere(NewVector(-1, 0, -1), 0.5, NewDielectric(1.5)))
-	list = append(list, NewSphere(NewVector(-1, 0, -1), -0.45, NewDielectric(1.5)))
-	world := NewHitableList(list, len(list))
-	lookFrom := NewVector(3, 3, 2)
-	lookAt := NewVector(0, 0, -1)
-	distToFocus := lookFrom.Sub(lookAt).Norm()
-	aperture := 2.0
+	world := randomScene()
+	lookFrom := NewVector(13, 2, 3)
+	lookAt := NewVector(0, 0, 0)
+	distToFocus := 10.0
+	aperture := 0.1
 	cam := NewCamera(lookFrom, lookAt, NewVector(0, 1, 0), 20, float64(nx)/float64(ny), aperture, distToFocus)
 	for j := ny - 1; j >= 0; j-- {
 		for i := 0; i < nx; i++ {
