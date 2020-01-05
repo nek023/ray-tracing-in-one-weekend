@@ -158,8 +158,63 @@ func (m Metal) Scatter(rIn Ray, rec *HitRecord, attenuation *r3.Vector, scattere
 	return scattered.Dir.Dot(rec.Normal) > 0
 }
 
+type Dielectric struct {
+	RefIdx float64
+}
+
+func NewDielectric(refIdx float64) Dielectric {
+	return Dielectric{RefIdx: refIdx}
+}
+
+func (d Dielectric) Scatter(rIn Ray, rec *HitRecord, attenuation *r3.Vector, scattered *Ray) bool {
+	var outwardNormal r3.Vector
+	reflected := reflect(rIn.Dir, rec.Normal)
+	var niOverNt float64
+	*attenuation = NewVector(1, 1, 1)
+	var refracted r3.Vector
+	var reflectProb float64
+	var cosine float64
+	if rIn.Dir.Dot(rec.Normal) > 0 {
+		outwardNormal = rec.Normal.Mul(-1)
+		niOverNt = d.RefIdx
+		cosine = d.RefIdx * rIn.Dir.Dot(rec.Normal) / rIn.Dir.Norm()
+	} else {
+		outwardNormal = rec.Normal
+		niOverNt = 1.0 / d.RefIdx
+		cosine = -rIn.Dir.Dot(rec.Normal) / rIn.Dir.Norm()
+	}
+	if refract(rIn.Dir, outwardNormal, niOverNt, &refracted) {
+		reflectProb = schlick(cosine, d.RefIdx)
+	} else {
+		reflectProb = 1.0
+	}
+	if rand.Float64() < reflectProb {
+		*scattered = NewRay(rec.P, reflected)
+	} else {
+		*scattered = NewRay(rec.P, refracted)
+	}
+	return true
+}
+
 func reflect(v, n r3.Vector) r3.Vector {
 	return v.Sub(n.Mul(2 * v.Dot(n)))
+}
+
+func refract(v r3.Vector, n r3.Vector, niOverNt float64, refracted *r3.Vector) bool {
+	uv := v.Normalize()
+	dt := uv.Dot(n)
+	discriminant := 1.0 - niOverNt*niOverNt*(1-dt*dt)
+	if discriminant > 0 {
+		*refracted = uv.Sub(n.Mul(dt)).Mul(niOverNt).Sub(n.Mul(math.Sqrt(discriminant)))
+		return true
+	}
+	return false
+}
+
+func schlick(cosine, refIdx float64) float64 {
+	r0 := (1 - refIdx) / (1 + refIdx)
+	r0 = r0 * r0
+	return r0 + (1-r0)*math.Pow(1-cosine, 5)
 }
 
 func randomInUnitSphere() r3.Vector {
@@ -203,10 +258,11 @@ func main() {
 	ns := 100
 	fmt.Printf("P3\n%d %d\n255\n", nx, ny)
 	var list []Hitable
-	list = append(list, NewSphere(NewVector(0, 0, -1), 0.5, NewLambertian(NewVector(0.8, 0.3, 0.3))))
+	list = append(list, NewSphere(NewVector(0, 0, -1), 0.5, NewLambertian(NewVector(0.1, 0.2, 0.5))))
 	list = append(list, NewSphere(NewVector(0, -100.5, -1), 100, NewLambertian(NewVector(0.8, 0.8, 0))))
-	list = append(list, NewSphere(NewVector(1, 0, -1), 0.5, NewMetal(NewVector(0.8, 0.6, 0.2), 0.3)))
-	list = append(list, NewSphere(NewVector(-1, 0, -1), 0.5, NewMetal(NewVector(0.8, 0.8, 0.8), 0.1)))
+	list = append(list, NewSphere(NewVector(1, 0, -1), 0.5, NewMetal(NewVector(0.8, 0.6, 0.2), 0)))
+	list = append(list, NewSphere(NewVector(-1, 0, -1), 0.5, NewDielectric(1.5)))
+	list = append(list, NewSphere(NewVector(-1, 0, -1), -0.45, NewDielectric(1.5)))
 	world := NewHitableList(list, len(list))
 	cam := NewCamera(
 		NewVector(0.0, 0.0, 0.0),
