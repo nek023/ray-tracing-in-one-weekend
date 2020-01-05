@@ -138,15 +138,22 @@ func (l Lambertian) Scatter(rIn Ray, rec *HitRecord, attenuation *r3.Vector, sca
 
 type Metal struct {
 	Albedo r3.Vector
+	Fuzz   float64
 }
 
-func NewMetal(albedo r3.Vector) Metal {
-	return Metal{Albedo: albedo}
+func NewMetal(albedo r3.Vector, fuzz float64) Metal {
+	m := Metal{Albedo: albedo}
+	if fuzz < 1 {
+		m.Fuzz = fuzz
+	} else {
+		m.Fuzz = 1
+	}
+	return m
 }
 
 func (m Metal) Scatter(rIn Ray, rec *HitRecord, attenuation *r3.Vector, scattered *Ray) bool {
 	reflected := reflect(rIn.Dir.Normalize(), rec.Normal)
-	*scattered = NewRay(rec.P, reflected)
+	*scattered = NewRay(rec.P, reflected.Add(randomInUnitSphere().Mul(m.Fuzz)))
 	*attenuation = m.Albedo
 	return scattered.Dir.Dot(rec.Normal) > 0
 }
@@ -198,8 +205,8 @@ func main() {
 	var list []Hitable
 	list = append(list, NewSphere(NewVector(0, 0, -1), 0.5, NewLambertian(NewVector(0.8, 0.3, 0.3))))
 	list = append(list, NewSphere(NewVector(0, -100.5, -1), 100, NewLambertian(NewVector(0.8, 0.8, 0))))
-	list = append(list, NewSphere(NewVector(1, 0, -1), 0.5, NewMetal(NewVector(0.8, 0.6, 0.2))))
-	list = append(list, NewSphere(NewVector(-1, 0, -1), 0.5, NewMetal(NewVector(0.8, 0.8, 0.8))))
+	list = append(list, NewSphere(NewVector(1, 0, -1), 0.5, NewMetal(NewVector(0.8, 0.6, 0.2), 0.3)))
+	list = append(list, NewSphere(NewVector(-1, 0, -1), 0.5, NewMetal(NewVector(0.8, 0.8, 0.8), 0.1)))
 	world := NewHitableList(list, len(list))
 	cam := NewCamera(
 		NewVector(0.0, 0.0, 0.0),
